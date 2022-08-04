@@ -10,7 +10,7 @@ Lepracaun - Varies of .NET Synchronization Context.
 
 | Package  | NuGet                                                                                                                |
 |:---------|:---------------------------------------------------------------------------------------------------------------------|
-| Lepracaun | [![NuGet Lepracaun](https://img.shields.io/nuget/v/Marionetta.svg?style=flat)](https://www.nuget.org/packages/Lepracaun) |
+| Lepracaun | [![NuGet Lepracaun](https://img.shields.io/nuget/v/Lepracaun.svg?style=flat)](https://www.nuget.org/packages/Lepracaun) |
 
 ## CI
 
