@@ -55,11 +55,18 @@ public class Application : IDisposable
 
     private readonly ThreadBoundSynchronizationContextBase context;
 
+    /// <summary>
+    /// Constructor.
+    /// </summary>
     public Application() :
         this(new ThreadBoundSynchronizationContext())
     {
     }
 
+    /// <summary>
+    /// Constructor.
+    /// </summary>
+    /// <param name="context">Applicated synchronization context</param>
     public Application(ThreadBoundSynchronizationContextBase context)
     {
         this.context = context;
@@ -112,9 +119,19 @@ public class Application : IDisposable
     public void Shutdown() =>
         this.context.Shutdown();
 
+    /// <summary>
+    /// Synchronized invoking a delegate on the application context.
+    /// </summary>
+    /// <param name="action">Action delegate</param>
     public void Invoke(Action action) =>
         this.context.Send(_ => action(), null);
 
+    /// <summary>
+    /// Synchronized invoking a delegate on the application context.
+    /// </summary>
+    /// <typeparam name="TResult">Return value type</typeparam>
+    /// <param name="action">Action delegate</param>
+    /// <returns>Return value</returns>
     public TResult Invoke<TResult>(Func<TResult> action)
     {
         TResult result = default!;
@@ -122,9 +139,17 @@ public class Application : IDisposable
         return result;
     }
 
+    /// <summary>
+    /// Asynchronized invoking a delegate on the application context.
+    /// </summary>
+    /// <param name="action">Action delegate</param>
     public void BeginInvoke(Action action) =>
         this.context.Post(_ => action(), null);
 
+    /// <summary>
+    /// Asynchronized invoking a delegate on the application context.
+    /// </summary>
+    /// <param name="action">Action delegate</param>
     public Task InvokeAsync(Action action)
     {
         var tcs = new TaskCompletionSource<int>();
@@ -143,6 +168,12 @@ public class Application : IDisposable
         return tcs.Task;
     }
 
+    /// <summary>
+    /// Asynchronized invoking a delegate on the application context.
+    /// </summary>
+    /// <typeparam name="TResult">Return value type</typeparam>
+    /// <param name="action">Action delegate</param>
+    /// <returns>Return value</returns>
     public Task<TResult> InvokeAsync<TResult>(Func<TResult> action)
     {
         var tcs = new TaskCompletionSource<TResult>();
@@ -160,6 +191,10 @@ public class Application : IDisposable
         return tcs.Task;
     }
 
+    /// <summary>
+    /// Asynchronized invoking a delegate on the application context.
+    /// </summary>
+    /// <param name="action">Asynchronous action delegate</param>
     public Task InvokeAsync(Func<Task> action)
     {
         var tcs = new TaskCompletionSource<int>();
@@ -178,6 +213,12 @@ public class Application : IDisposable
         return tcs.Task;
     }
 
+    /// <summary>
+    /// Asynchronized invoking a delegate on the application context.
+    /// </summary>
+    /// <typeparam name="TResult">Return value type</typeparam>
+    /// <param name="action">Asynchronous action delegate</param>
+    /// <returns>Return value</returns>
     public Task<TResult> InvokeAsync<TResult>(Func<Task<TResult>> action)
     {
         var tcs = new TaskCompletionSource<TResult>();
@@ -199,9 +240,13 @@ public class Application : IDisposable
 /// <summary>
 /// Pseudo Application class.
 /// </summary>
+/// <typeparam name="TSynchronizationContext">Applicated synchronization context type</typeparam>
 public sealed class Application<TSynchronizationContext> : Application
     where TSynchronizationContext : ThreadBoundSynchronizationContextBase, new()
 {
+    /// <summary>
+    /// Constructor.
+    /// </summary>
     public Application() :
         base(new TSynchronizationContext())
     {

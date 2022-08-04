@@ -113,6 +113,7 @@ public abstract class ThreadBoundSynchronizationContextBase :
     /// <param name="continuation">Continuation callback delegate.</param>
     /// <param name="state">Continuation argument.</param>
     public override void Send(SendOrPostCallback continuation, object? state) =>
+        // TODO: invalid opeation on synchronously.
         this.Post(continuation, state);
 
     /// <summary>
