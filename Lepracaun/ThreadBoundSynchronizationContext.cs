@@ -7,6 +7,7 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////
 
+using System;
 using System.Collections.Concurrent;
 using System.Threading;
 
@@ -55,13 +56,23 @@ public sealed class ThreadBoundSynchronizationContext :
     }
 
     protected override void OnRun(
-        int targetThreadId)
+        int targetThreadId, Func<Exception, bool> onUnhandledException)
     {
         // Run queue consumer.
         foreach (var continuationInformation in this.queue.GetConsumingEnumerable())
         {
-            // Invoke continuation.
-            continuationInformation.Continuation(continuationInformation.State);
+            try
+            {
+                // Invoke continuation.
+                continuationInformation.Continuation(continuationInformation.State);
+            }
+            catch (Exception ex)
+            {
+                if (!onUnhandledException(ex))
+                {
+                    throw;
+                }
+            }
         }
     }
 

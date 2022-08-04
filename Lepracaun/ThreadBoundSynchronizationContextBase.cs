@@ -8,10 +8,20 @@
 /////////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Lepracaun;
+
+public sealed class UnhandledExceptionEventArgs : EventArgs
+{
+    public readonly Exception Exception;
+    public bool Handled;
+
+    public UnhandledExceptionEventArgs(Exception ex) =>
+        this.Exception = ex;
+}
 
 /// <summary>
 /// Custom synchronization context implementation using Windows message queue (Win32)
@@ -48,6 +58,11 @@ public abstract class ThreadBoundSynchronizationContextBase :
         this.GetCurrentThreadId();
 
     /// <summary>
+    /// Occurred unhandled exception event.
+    /// </summary>
+    public EventHandler<UnhandledExceptionEventArgs>? UnhandledException;
+
+    /// <summary>
     /// Copy this context.
     /// </summary>
     /// <param name="targetThreadId">Target thread identity</param>
@@ -81,8 +96,9 @@ public abstract class ThreadBoundSynchronizationContextBase :
     /// Execute message queue.
     /// </summary>
     /// <param name="targetThreadId">Target thread identity.</param>
+    /// <param name="onUnhandledException">Occurred unhandled exception handler</param>
     protected abstract void OnRun(
-        int targetThreadId);
+        int targetThreadId, Func<Exception, bool> onUnhandledException);
 
     /// <summary>
     /// Shutdown requested.
@@ -153,7 +169,21 @@ public abstract class ThreadBoundSynchronizationContextBase :
         // Schedule task completion.
         task?.ContinueWith(_ => this.OnShutdown(this.targetThreadId));
 
-        this.OnRun(this.targetThreadId);
+        this.OnRun(
+            this.targetThreadId,
+            ex =>
+            {
+                var e = new UnhandledExceptionEventArgs(ex);
+                try
+                {
+                    this.UnhandledException?.Invoke(this, e);
+                }
+                catch (Exception ex2)
+                {
+                    Trace.WriteLine(ex2.ToString());
+                }
+                return e.Handled;
+            });
     }
 
     /// <summary>
