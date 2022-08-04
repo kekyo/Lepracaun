@@ -34,7 +34,7 @@ public sealed class SimpleQueueSynchronizationContext : SynchronizationContext
     /// <summary>
     /// This synchronization context bound thread id.
     /// </summary>
-    private readonly int targetThreadId = Thread.CurrentThread.ManagedThreadId;
+    private readonly int targetThreadId;
 
     /// <summary>
     /// Number of recursive posts.
@@ -44,28 +44,31 @@ public sealed class SimpleQueueSynchronizationContext : SynchronizationContext
     /// <summary>
     /// Constructor.
     /// </summary>
-    public SimpleQueueSynchronizationContext()
+    public SimpleQueueSynchronizationContext() :
+        this(Thread.CurrentThread.ManagedThreadId)
     {
     }
+
+    /// <summary>
+    /// Constructor.
+    /// </summary>
+    private SimpleQueueSynchronizationContext(int targetThreadId) =>
+        this.targetThreadId = targetThreadId;
 
     /// <summary>
     /// Copy instance.
     /// </summary>
     /// <returns>Copied instance.</returns>
-    public override SynchronizationContext CreateCopy()
-    {
-        return new SimpleQueueSynchronizationContext();
-    }
+    public override SynchronizationContext CreateCopy() =>
+        new SimpleQueueSynchronizationContext(this.targetThreadId);
 
     /// <summary>
     /// Send continuation into synchronization context.
     /// </summary>
     /// <param name="continuation">Continuation callback delegate.</param>
     /// <param name="state">Continuation argument.</param>
-    public override void Send(SendOrPostCallback continuation, object? state)
-    {
+    public override void Send(SendOrPostCallback continuation, object? state) =>
         this.Post(continuation, state);
-    }
 
     /// <summary>
     /// Post continuation into synchronization context.
@@ -96,16 +99,14 @@ public sealed class SimpleQueueSynchronizationContext : SynchronizationContext
         }
 
         // Add continuation information into queue.
-        queue.Add(new ContinuationInformation { Continuation = continuation, State = state });
+        this.queue.Add(new ContinuationInformation { Continuation = continuation, State = state });
     }
 
     /// <summary>
     /// Execute message queue.
     /// </summary>
-    public void Run()
-    {
+    public void Run() =>
         this.Run(null);
-    }
 
     /// <summary>
     /// Execute message queue.
@@ -121,10 +122,10 @@ public sealed class SimpleQueueSynchronizationContext : SynchronizationContext
         }
 
         // Schedule task completion for abort queue consumer.
-        task?.ContinueWith(_ => queue.CompleteAdding());
+        task?.ContinueWith(_ => this.queue.CompleteAdding());
 
         // Run queue consumer.
-        foreach (var continuationInformation in queue.GetConsumingEnumerable())
+        foreach (var continuationInformation in this.queue.GetConsumingEnumerable())
         {
             // Invoke continuation.
             continuationInformation.Continuation(continuationInformation.State);

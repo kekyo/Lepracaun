@@ -58,17 +58,15 @@ public sealed class Win32MessagingSynchronizationContext : SynchronizationContex
     /// <summary>
     /// Type initializer.
     /// </summary>
-    static Win32MessagingSynchronizationContext()
-    {
+    static Win32MessagingSynchronizationContext() =>
         // Allocate Windows message number.
         // Using guid because type loaded into multiple AppDomain, type initializer called multiple.
         WM_SC = RegisterWindowMessageW("MessageQueueSynchronizationContext_" + Guid.NewGuid().ToString("N"));
-    }
 
     /// <summary>
     /// This synchronization context bound thread id.
     /// </summary>
-    private readonly int targetThreadId = GetCurrentThreadId();
+    private readonly int targetThreadId;
 
     /// <summary>
     /// Number of recursive posts.
@@ -78,28 +76,31 @@ public sealed class Win32MessagingSynchronizationContext : SynchronizationContex
     /// <summary>
     /// Constructor.
     /// </summary>
-    public Win32MessagingSynchronizationContext()
+    public Win32MessagingSynchronizationContext() :
+        this(GetCurrentThreadId())
     {
     }
+
+    /// <summary>
+    /// Constructor.
+    /// </summary>
+    private Win32MessagingSynchronizationContext(int targetThreadId) =>
+        this.targetThreadId = targetThreadId;
 
     /// <summary>
     /// Copy instance.
     /// </summary>
     /// <returns>Copied instance.</returns>
-    public override SynchronizationContext CreateCopy()
-    {
-        return new Win32MessagingSynchronizationContext();
-    }
+    public override SynchronizationContext CreateCopy() =>
+        new Win32MessagingSynchronizationContext(this.targetThreadId);
 
     /// <summary>
     /// Send continuation into synchronization context.
     /// </summary>
     /// <param name="continuation">Continuation callback delegate.</param>
     /// <param name="state">Continuation argument.</param>
-    public override void Send(SendOrPostCallback continuation, object? state)
-    {
+    public override void Send(SendOrPostCallback continuation, object? state) =>
         this.Post(continuation, state);
-    }
 
     /// <summary>
     /// Post continuation into synchronization context.
@@ -142,10 +143,8 @@ public sealed class Win32MessagingSynchronizationContext : SynchronizationContex
     /// <summary>
     /// Execute message queue.
     /// </summary>
-    public void Run()
-    {
+    public void Run() =>
         this.Run(null);
-    }
 
     /// <summary>
     /// Execute message queue.
