@@ -8,29 +8,17 @@
 /////////////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Lepracaun;
 
 /// <summary>
-/// Custom synchronization context implementation using BlockingCollection.
+/// Custom synchronization context implementation using Windows message queue (Win32)
 /// </summary>
-public sealed class SimpleQueueSynchronizationContext : SynchronizationContext
+public abstract class ThreadBoundSynchronizationContextBase :
+    SynchronizationContext
 {
-    private struct ContinuationInformation
-    {
-        public SendOrPostCallback Continuation;
-        public object? State;
-    }
-
-    /// <summary>
-    /// Continuation queue.
-    /// </summary>
-    private readonly BlockingCollection<ContinuationInformation> queue =
-        new BlockingCollection<ContinuationInformation>();
-
     /// <summary>
     /// This synchronization context bound thread id.
     /// </summary>
@@ -44,23 +32,64 @@ public sealed class SimpleQueueSynchronizationContext : SynchronizationContext
     /// <summary>
     /// Constructor.
     /// </summary>
-    public SimpleQueueSynchronizationContext() :
-        this(Thread.CurrentThread.ManagedThreadId)
-    {
-    }
+    protected ThreadBoundSynchronizationContextBase() =>
+        this.targetThreadId = this.GetCurrentThreadId();
 
     /// <summary>
     /// Constructor.
     /// </summary>
-    private SimpleQueueSynchronizationContext(int targetThreadId) =>
+    protected ThreadBoundSynchronizationContextBase(int targetThreadId) =>
         this.targetThreadId = targetThreadId;
 
     /// <summary>
-    /// Copy instance.
+    /// Get bound thread identity.
     /// </summary>
-    /// <returns>Copied instance.</returns>
+    public int BoundIdentity =>
+        this.GetCurrentThreadId();
+
+    /// <summary>
+    /// Copy this context.
+    /// </summary>
+    /// <param name="targetThreadId">Target thread identity</param>
+    /// <returns>Copied context.</returns>
+    protected abstract SynchronizationContext OnCreateCopy(
+        int targetThreadId);
+
+    /// <summary>
+    /// Copy this context.
+    /// </summary>
+    /// <returns>Copied context.</returns>
     public override SynchronizationContext CreateCopy() =>
-        new SimpleQueueSynchronizationContext(this.targetThreadId);
+        this.OnCreateCopy(this.targetThreadId);
+
+    /// <summary>
+    /// Get current thread identity.
+    /// </summary>
+    /// <returns>Thread identity</returns>
+    protected abstract int GetCurrentThreadId();
+
+    /// <summary>
+    /// Post continuation into synchronization context.
+    /// </summary>
+    /// <param name="targetThreadId">Target thread identity.</param>
+    /// <param name="continuation">Continuation callback delegate.</param>
+    /// <param name="state">Continuation argument.</param>
+    protected abstract void OnPost(
+        int targetThreadId, SendOrPostCallback continuation, object? state);
+
+    /// <summary>
+    /// Execute message queue.
+    /// </summary>
+    /// <param name="targetThreadId">Target thread identity.</param>
+    protected abstract void OnRun(
+        int targetThreadId);
+
+    /// <summary>
+    /// Shutdown requested.
+    /// </summary>
+    /// <param name="targetThreadId">Target thread identity.</param>
+    protected abstract void OnShutdown(
+        int targetThreadId);
 
     /// <summary>
     /// Send continuation into synchronization context.
@@ -78,8 +107,8 @@ public sealed class SimpleQueueSynchronizationContext : SynchronizationContext
     public override void Post(SendOrPostCallback continuation, object? state)
     {
         // If current thread id is target thread id:
-        var currentThreadId = Thread.CurrentThread.ManagedThreadId;
-        if (currentThreadId == targetThreadId)
+        var currentThreadId = this.GetCurrentThreadId();
+        if (currentThreadId == this.targetThreadId)
         {
             // HACK: If current thread is already target thread, invoke continuation directly.
             //   But if continuation has invokeing Post/Send recursive, cause stack overflow.
@@ -98,37 +127,38 @@ public sealed class SimpleQueueSynchronizationContext : SynchronizationContext
             }
         }
 
-        // Add continuation information into queue.
-        this.queue.Add(new ContinuationInformation { Continuation = continuation, State = state });
+        this.OnPost(this.targetThreadId, continuation, state);
     }
 
     /// <summary>
     /// Execute message queue.
     /// </summary>
     public void Run() =>
-        this.Run(null);
+        this.Run(null!);
 
     /// <summary>
     /// Execute message queue.
     /// </summary>
     /// <param name="task">Completion awaiting task</param>
-    public void Run(Task? task)
+    public void Run(Task task)
     {
         // Run only target thread.
-        var currentThreadId = Thread.CurrentThread.ManagedThreadId;
-        if (currentThreadId != targetThreadId)
+        var currentThreadId = this.GetCurrentThreadId();
+        if (currentThreadId != this.targetThreadId)
         {
-            throw new InvalidOperationException();
+            throw new InvalidOperationException(
+                $"Thread mismatch between created and running: Created={this.targetThreadId}, Running={currentThreadId}");
         }
 
-        // Schedule task completion for abort queue consumer.
-        task?.ContinueWith(_ => this.queue.CompleteAdding());
+        // Schedule task completion.
+        task?.ContinueWith(_ => this.OnShutdown(this.targetThreadId));
 
-        // Run queue consumer.
-        foreach (var continuationInformation in this.queue.GetConsumingEnumerable())
-        {
-            // Invoke continuation.
-            continuationInformation.Continuation(continuationInformation.State);
-        }
+        this.OnRun(this.targetThreadId);
     }
+
+    /// <summary>
+    /// Shutdown running context.
+    /// </summary>
+    public void Shutdown() =>
+        this.OnShutdown(this.targetThreadId);
 }
