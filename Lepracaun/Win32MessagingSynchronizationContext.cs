@@ -7,49 +7,19 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////
 
+using Lepracaun.Internal;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace Lepracaun;
 
 /// <summary>
 /// Custom synchronization context implementation using Windows message queue (Win32)
 /// </summary>
-public sealed class Win32MessagingSynchronizationContext : SynchronizationContext
+public sealed class Win32MessagingSynchronizationContext :
+    ThreadBoundSynchronizationContextBase
 {
-    #region Interops for Win32
-    private static readonly int WM_QUIT = 0x0012;
-
-    private struct MSG
-    {
-        public IntPtr hWnd;
-        public int msg;
-        public IntPtr wParam;
-        public IntPtr lParam;
-        public IntPtr result;
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool PostThreadMessage(int threadId, int msg, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, int wMsgFilterMin, int wMsgFilterMax);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool TranslateMessage([In] ref MSG lpMsg);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr DispatchMessage([In] ref MSG lpmsg);
-
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern int RegisterWindowMessageW(string lpString);
-
-    [DllImport("kernel32.dll")]
-    private static extern int GetCurrentThreadId();
-    #endregion
-
     /// <summary>
     /// Internal uses Windows message number (Win32).
     /// </summary>
@@ -61,75 +31,31 @@ public sealed class Win32MessagingSynchronizationContext : SynchronizationContex
     static Win32MessagingSynchronizationContext() =>
         // Allocate Windows message number.
         // Using guid because type loaded into multiple AppDomain, type initializer called multiple.
-        WM_SC = RegisterWindowMessageW("MessageQueueSynchronizationContext_" + Guid.NewGuid().ToString("N"));
-
-    /// <summary>
-    /// This synchronization context bound thread id.
-    /// </summary>
-    private readonly int targetThreadId;
-
-    /// <summary>
-    /// Number of recursive posts.
-    /// </summary>
-    private int recursiveCount = 0;
+        WM_SC = Win32NativeMethods.RegisterWindowMessageW(
+            "Win32MessagingSynchronizationContext_" + Guid.NewGuid().ToString("N"));
 
     /// <summary>
     /// Constructor.
     /// </summary>
-    public Win32MessagingSynchronizationContext() :
-        this(GetCurrentThreadId())
+    public Win32MessagingSynchronizationContext()
     {
     }
 
-    /// <summary>
-    /// Constructor.
-    /// </summary>
-    private Win32MessagingSynchronizationContext(int targetThreadId) =>
-        this.targetThreadId = targetThreadId;
-
-    /// <summary>
-    /// Copy instance.
-    /// </summary>
-    /// <returns>Copied instance.</returns>
-    public override SynchronizationContext CreateCopy() =>
-        new Win32MessagingSynchronizationContext(this.targetThreadId);
-
-    /// <summary>
-    /// Send continuation into synchronization context.
-    /// </summary>
-    /// <param name="continuation">Continuation callback delegate.</param>
-    /// <param name="state">Continuation argument.</param>
-    public override void Send(SendOrPostCallback continuation, object? state) =>
-        this.Post(continuation, state);
-
-    /// <summary>
-    /// Post continuation into synchronization context.
-    /// </summary>
-    /// <param name="continuation">Continuation callback delegate.</param>
-    /// <param name="state">Continuation argument.</param>
-    public override void Post(SendOrPostCallback continuation, object? state)
+    private Win32MessagingSynchronizationContext(int targetThreadId) :
+        base(targetThreadId)
     {
-        // If current thread id is target thread id:
-        var currentThreadId = GetCurrentThreadId();
-        if (currentThreadId == targetThreadId)
-        {
-            // HACK: If current thread is already target thread, invoke continuation directly.
-            //   But if continuation has invokeing Post/Send recursive, cause stack overflow.
-            //   We can fix this problem by simple solution: Continuation invoke every post into queue,
-            //   but performance will be lost.
-            //   This counter uses post for scattering (each 50 times).
-            if (recursiveCount < 50)
-            {
-                recursiveCount++;
+    }
 
-                // Invoke continuation on current thread is better performance.
-                continuation(state);
+    protected override int GetCurrentThreadId() =>
+        Win32NativeMethods.GetCurrentThreadId();
 
-                recursiveCount--;
-                return;
-            }
-        }
+    protected override SynchronizationContext OnCreateCopy(
+        int targetThreadId) =>
+        new Win32MessagingSynchronizationContext(targetThreadId);
 
+    protected override void OnPost(
+        int targetThreadId, SendOrPostCallback continuation, object? state)
+    {
         // Get continuation and state cookie.
         // Because these values turn to unmanaged value (IntPtr),
         // so GC cannot track instances and maybe collects...
@@ -137,38 +63,19 @@ public sealed class Win32MessagingSynchronizationContext : SynchronizationContex
         var stateCookie = GCHandle.ToIntPtr(GCHandle.Alloc(state));
 
         // Post continuation information into UI queue.
-        PostThreadMessage(targetThreadId, WM_SC, continuationCookie, stateCookie);
+        Win32NativeMethods.PostThreadMessage(
+            targetThreadId, WM_SC, continuationCookie, stateCookie);
     }
 
-    /// <summary>
-    /// Execute message queue.
-    /// </summary>
-    public void Run() =>
-        this.Run(null);
-
-    /// <summary>
-    /// Execute message queue.
-    /// </summary>
-    /// <param name="task">Completion awaiting task</param>
-    public void Run(Task? task)
+    protected override void OnRun(
+        int targetThreadId)
     {
-        // Run only target thread.
-        var currentThreadId = GetCurrentThreadId();
-        if (currentThreadId != targetThreadId)
-        {
-            throw new InvalidOperationException();
-        }
-
-        // Schedule task completion for abort message loop.
-        task?.ContinueWith(_ =>
-            PostThreadMessage(targetThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero));
-
         // Run message loop (very legacy knowledge...)
         while (true)
         {
             // Get front of queue (or waiting).
-            MSG msg;
-            var result = GetMessage(out msg, IntPtr.Zero, 0, 0);
+            Win32NativeMethods.MSG msg;
+            var result = Win32NativeMethods.GetMessage(out msg, IntPtr.Zero, 0, 0);
 
             // If message number is WM_QUIT (Cause PostQuitMessage API):
             if (result == 0)
@@ -208,10 +115,15 @@ public sealed class Win32MessagingSynchronizationContext : SynchronizationContex
             }
 
             // Translate accelerator (require UI stability)
-            TranslateMessage(ref msg);
+            Win32NativeMethods.TranslateMessage(ref msg);
 
             // Send to assigned window procedure.
-            DispatchMessage(ref msg);
+            Win32NativeMethods.DispatchMessage(ref msg);
         }
     }
+
+    protected override void OnShutdown(
+        int targetThreadId) =>
+        Win32NativeMethods.PostThreadMessage(
+            targetThreadId, Win32NativeMethods.WM_QUIT, IntPtr.Zero, IntPtr.Zero);
 }
