@@ -24,6 +24,59 @@ Lepracaun - Varies of .NET Synchronization Context.
 
 TODO:
 
+### Main thread bound asynchronous operation
+
+```csharp
+private static async Task MainAsync(string[] args)
+{
+    // Your asynchronous operations
+    // into only main thread (Will not use any worker threads)
+
+    using var rs = new FileStream(...);
+    using var ws = new FileStream(...);
+
+    var buffer = new byte[1024];
+    var read = await rs.ReadAsync(buffer, 0, buffer.Length);
+
+    // (Rebound to main thread)
+    await ws.WriteAsync(buffer, 0, read);
+
+    // (Rebound to main thread)
+    await ws.FlushAsync();
+   
+    // (Rebound to main thread)
+
+    // ...
+}
+
+public static void Main(string[] args)
+{
+    using var app = new Application();
+
+    app.Run(MainAsync(args));    
+}
+```
+
+### Bound temporary Win32 UI thread on any arbitrary thread context
+
+```csharp
+public void MarshalInToUIThread()
+{
+    using var app = new Application(
+        new Win32MessagingSynchronizationContext());
+
+    Task.Run(() =>
+    {
+        // Some longer operations...
+
+        // Manipulate UI from worker thread context.
+        app.BeginInvoke(() => NativeMethods.ShowWindow(this.window));
+    });
+
+    app.Run();
+}
+```
+
 ----
 
 ## License

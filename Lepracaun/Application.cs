@@ -89,6 +89,12 @@ public class Application : IDisposable
     }
 
     /// <summary>
+    /// Get bound thread identity.
+    /// </summary>
+    public int BoundIdentity =>
+        this.context.BoundIdentity;
+
+    /// <summary>
     /// Occurred unhandled exception event.
     /// </summary>
     public EventHandler<UnhandledExceptionEventArgs>? UnhandledException;
