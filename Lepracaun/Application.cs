@@ -1,4 +1,4 @@
-/////////////////////////////////////////////////////////////////////////////////////
+﻿/////////////////////////////////////////////////////////////////////////////////////
 //
 // Lepracaun - Varies of .NET Synchronization Context.
 // Copyright (c) Kouji Matsui (@kozy_kekyo, @kekyo@mastodon.cloud)
@@ -18,6 +18,41 @@ namespace Lepracaun;
 /// </summary>
 public class Application : IDisposable
 {
+    private static readonly object locker = new();
+    private static Application? current;
+
+    /// <summary>
+    /// Get current Application instance.
+    /// </summary>
+    public static Application Current
+    {
+        get
+        {
+            lock (locker)
+            {
+                if (current == null)
+                {
+                    current = new Application();
+                }
+            }
+            return current;
+        }
+        private set
+        {
+            lock (locker)
+            {
+                if (!object.ReferenceEquals(value, current))
+                {
+                    if (current != null)
+                    {
+                        current.Dispose();
+                    }
+                    current = value;
+                }
+            }
+        }
+    }
+
     private readonly ThreadBoundSynchronizationContextBase context;
 
     public Application() :
@@ -45,11 +80,6 @@ public class Application : IDisposable
         this.context.Shutdown();
         this.context.UnhandledException -= this.OnUnhandledException!;
     }
-
-    /// <summary>
-    /// Get current Application instance.
-    /// </summary>
-    public static Application? Current { get; private set; }
 
     /// <summary>
     /// Occurred unhandled exception event.
