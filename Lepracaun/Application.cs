@@ -28,14 +28,33 @@ public class Application : IDisposable
     public Application(ThreadBoundSynchronizationContextBase context)
     {
         this.context = context;
+        this.context.UnhandledException += this.OnUnhandledException!;
+
+        Current = this;
         SynchronizationContext.SetSynchronizationContext(this.context);
     }
+
+    private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e) =>
+        this.UnhandledException?.Invoke(this, e);
 
     /// <summary>
     /// Dispose.
     /// </summary>
-    public void Dispose() =>
+    public void Dispose()
+    {
         this.context.Shutdown();
+        this.context.UnhandledException -= this.OnUnhandledException!;
+    }
+
+    /// <summary>
+    /// Get current Application instance.
+    /// </summary>
+    public static Application? Current { get; private set; }
+
+    /// <summary>
+    /// Occurred unhandled exception event.
+    /// </summary>
+    public EventHandler<UnhandledExceptionEventArgs>? UnhandledException;
 
     /// <summary>
     /// Run the application.
