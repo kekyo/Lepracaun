@@ -112,9 +112,39 @@ public abstract class ThreadBoundSynchronizationContextBase :
     /// </summary>
     /// <param name="continuation">Continuation callback delegate.</param>
     /// <param name="state">Continuation argument.</param>
-    public override void Send(SendOrPostCallback continuation, object? state) =>
-        // TODO: invalid opeation on synchronously.
-        this.Post(continuation, state);
+    public override void Send(SendOrPostCallback continuation, object? state)
+    {
+        // If current thread id is target thread id:
+        var currentThreadId = this.GetCurrentThreadId();
+        if (currentThreadId == this.targetThreadId)
+        {
+            // Invoke continuation on current thread.
+            continuation(state);
+
+            return;
+        }
+
+        using var mre = new ManualResetEventSlim(false);
+
+        // Marshal to.
+        this.OnPost(this.targetThreadId, state =>
+        {
+            try
+            {
+                continuation(state);
+            }
+            finally
+            {
+                mre.Set();
+            }
+        }, state);
+
+        // Yes, this can easily cause a deadlock on UI threads:
+        // * But as long as the Send() method requires blocking, we have no choice.
+        // * If this context is bound to the UI thread itself,
+        //   it is no problem, as it will be bypassed by the if block above.
+        mre.Wait();
+    }
 
     /// <summary>
     /// Post continuation into synchronization context.
