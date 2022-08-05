@@ -53,13 +53,13 @@ public class Application : IDisposable
         }
     }
 
-    private readonly ThreadBoundSynchronizationContextBase context;
+    private readonly ThreadBoundSynchronizationContext context;
 
     /// <summary>
     /// Constructor.
     /// </summary>
     public Application() :
-        this(new ThreadBoundSynchronizationContext())
+        this(new SingleThreadSynchronizationContext())
     {
     }
 
@@ -67,7 +67,7 @@ public class Application : IDisposable
     /// Constructor.
     /// </summary>
     /// <param name="context">Applicated synchronization context</param>
-    public Application(ThreadBoundSynchronizationContextBase context)
+    public Application(ThreadBoundSynchronizationContext context)
     {
         this.context = context;
         this.context.UnhandledException += this.OnUnhandledException!;
@@ -255,7 +255,7 @@ public class Application : IDisposable
 /// </summary>
 /// <typeparam name="TSynchronizationContext">Applicated synchronization context type</typeparam>
 public sealed class Application<TSynchronizationContext> : Application
-    where TSynchronizationContext : ThreadBoundSynchronizationContextBase, new()
+    where TSynchronizationContext : ThreadBoundSynchronizationContext, new()
 {
     /// <summary>
     /// Constructor.

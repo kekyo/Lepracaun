@@ -18,7 +18,7 @@ namespace Lepracaun;
 /// Custom synchronization context implementation using Windows message queue (Win32)
 /// </summary>
 public sealed class Win32MessagingSynchronizationContext :
-    ThreadBoundSynchronizationContextBase
+    ThreadBoundSynchronizationContext
 {
     /// <summary>
     /// Internal uses Windows message number (Win32).
@@ -37,7 +37,8 @@ public sealed class Win32MessagingSynchronizationContext :
     /// <summary>
     /// Constructor.
     /// </summary>
-    public Win32MessagingSynchronizationContext()
+    public Win32MessagingSynchronizationContext() :
+        base(Win32NativeMethods.GetCurrentThreadId())
     {
     }
 

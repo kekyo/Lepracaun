@@ -8,75 +8,234 @@
 /////////////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Lepracaun;
 
-/// <summary>
-/// Custom synchronization context implementation using BlockingCollection.
-/// </summary>
-public sealed class ThreadBoundSynchronizationContext :
-    ThreadBoundSynchronizationContextBase
+public sealed class UnhandledExceptionEventArgs : EventArgs
 {
-    private struct ContinuationInformation
-    {
-        public SendOrPostCallback Continuation;
-        public object? State;
-    }
+    public readonly Exception Exception;
+    public bool Handled;
+
+    public UnhandledExceptionEventArgs(Exception ex) =>
+        this.Exception = ex;
+}
+
+/// <summary>
+/// Custom synchronization context implementation using Windows message queue (Win32)
+/// </summary>
+public abstract class ThreadBoundSynchronizationContext :
+    SynchronizationContext
+{
+    /// <summary>
+    /// This synchronization context bound thread id.
+    /// </summary>
+    private int boundThreadId;
 
     /// <summary>
-    /// Continuation queue.
+    /// Number of recursive posts.
     /// </summary>
-    private readonly BlockingCollection<ContinuationInformation> queue = new();
+    private int recursiveCount = 0;
 
     /// <summary>
     /// Constructor.
     /// </summary>
-    public ThreadBoundSynchronizationContext()
+    protected ThreadBoundSynchronizationContext() =>
+        this.boundThreadId = -1;
+
+    /// <summary>
+    /// Constructor.
+    /// </summary>
+    protected ThreadBoundSynchronizationContext(int targetThreadId) =>
+        this.boundThreadId = targetThreadId;
+
+    protected void SetTargetThreadId(int targetThreadId)
     {
-    }
-
-    private ThreadBoundSynchronizationContext(int targetThreadId) :
-        base(targetThreadId)
-    {
-    }
-
-    protected override int GetCurrentThreadId() =>
-        Thread.CurrentThread.ManagedThreadId;
-
-    protected override SynchronizationContext OnCreateCopy(int targetThreadId) =>
-        new ThreadBoundSynchronizationContext(targetThreadId);
-
-    protected override void OnPost(
-        int targetThreadId, SendOrPostCallback continuation, object? state)
-    {
-        // Add continuation information into queue.
-        this.queue.Add(new ContinuationInformation { Continuation = continuation, State = state });
-    }
-
-    protected override void OnRun(
-        int targetThreadId, Func<Exception, bool> onUnhandledException)
-    {
-        // Run queue consumer.
-        foreach (var continuationInformation in this.queue.GetConsumingEnumerable())
+        if (Interlocked.CompareExchange(
+            ref this.boundThreadId, targetThreadId, -1) != -1)
         {
-            try
-            {
-                // Invoke continuation.
-                continuationInformation.Continuation(continuationInformation.State);
-            }
-            catch (Exception ex)
-            {
-                if (!onUnhandledException(ex))
-                {
-                    throw;
-                }
-            }
+            throw new InvalidOperationException();
         }
     }
 
-    protected override void OnShutdown(
-        int targetThreadId) =>
-        this.queue.CompleteAdding();
+    /// <summary>
+    /// Get bound thread identity.
+    /// </summary>
+    public int BoundIdentity =>
+        this.boundThreadId;
+
+    /// <summary>
+    /// Occurred unhandled exception event.
+    /// </summary>
+    public EventHandler<UnhandledExceptionEventArgs>? UnhandledException;
+
+    /// <summary>
+    /// Check current context is bound this.
+    /// </summary>
+    /// <returns>True if bound this.</returns>
+    public bool CheckAccess() =>
+        this.GetCurrentThreadId() == this.boundThreadId;
+
+    /// <summary>
+    /// Copy this context.
+    /// </summary>
+    /// <param name="targetThreadId">Target thread identity</param>
+    /// <returns>Copied context.</returns>
+    protected abstract SynchronizationContext OnCreateCopy(
+        int targetThreadId);
+
+    /// <summary>
+    /// Copy this context.
+    /// </summary>
+    /// <returns>Copied context.</returns>
+    public override SynchronizationContext CreateCopy() =>
+        this.OnCreateCopy(this.boundThreadId);
+
+    /// <summary>
+    /// Get current thread identity.
+    /// </summary>
+    /// <returns>Thread identity</returns>
+    protected abstract int GetCurrentThreadId();
+
+    /// <summary>
+    /// Post continuation into synchronization context.
+    /// </summary>
+    /// <param name="targetThreadId">Target thread identity.</param>
+    /// <param name="continuation">Continuation callback delegate.</param>
+    /// <param name="state">Continuation argument.</param>
+    protected abstract void OnPost(
+        int targetThreadId, SendOrPostCallback continuation, object? state);
+
+    /// <summary>
+    /// Execute message queue.
+    /// </summary>
+    /// <param name="targetThreadId">Target thread identity.</param>
+    /// <param name="onUnhandledException">Occurred unhandled exception handler</param>
+    protected abstract void OnRun(
+        int targetThreadId, Func<Exception, bool> onUnhandledException);
+
+    /// <summary>
+    /// Shutdown requested.
+    /// </summary>
+    /// <param name="targetThreadId">Target thread identity.</param>
+    protected abstract void OnShutdown(
+        int targetThreadId);
+
+    /// <summary>
+    /// Send continuation into synchronization context.
+    /// </summary>
+    /// <param name="continuation">Continuation callback delegate.</param>
+    /// <param name="state">Continuation argument.</param>
+    public override void Send(SendOrPostCallback continuation, object? state)
+    {
+        // If current thread id is target thread id:
+        var currentThreadId = this.GetCurrentThreadId();
+        if (currentThreadId == this.boundThreadId)
+        {
+            // Invoke continuation on current thread.
+            continuation(state);
+
+            return;
+        }
+
+        using var mre = new ManualResetEventSlim(false);
+
+        // Marshal to.
+        this.OnPost(this.boundThreadId, state =>
+        {
+            try
+            {
+                continuation(state);
+            }
+            finally
+            {
+                mre.Set();
+            }
+        }, state);
+
+        // Yes, this can easily cause a deadlock on UI threads:
+        // * But as long as the Send() method requires blocking, we have no choice.
+        // * If this context is bound to the UI thread itself,
+        //   it is no problem, as it will be bypassed by the if block above.
+        mre.Wait();
+    }
+
+    /// <summary>
+    /// Post continuation into synchronization context.
+    /// </summary>
+    /// <param name="continuation">Continuation callback delegate.</param>
+    /// <param name="state">Continuation argument.</param>
+    public override void Post(SendOrPostCallback continuation, object? state)
+    {
+        // If current thread id is target thread id:
+        var currentThreadId = this.GetCurrentThreadId();
+        if (currentThreadId == this.boundThreadId)
+        {
+            // HACK: If current thread is already target thread, invoke continuation directly.
+            //   But if continuation has invokeing Post/Send recursive, cause stack overflow.
+            //   We can fix this problem by simple solution: Continuation invoke every post into queue,
+            //   but performance will be lost.
+            //   This counter uses post for scattering (each 50 times).
+            if (recursiveCount < 50)
+            {
+                recursiveCount++;
+
+                // Invoke continuation on current thread is better performance.
+                continuation(state);
+
+                recursiveCount--;
+                return;
+            }
+        }
+
+        this.OnPost(this.boundThreadId, continuation, state);
+    }
+
+    /// <summary>
+    /// Execute message queue.
+    /// </summary>
+    public void Run() =>
+        this.Run(null!);
+
+    /// <summary>
+    /// Execute message queue.
+    /// </summary>
+    /// <param name="task">Completion awaiting task</param>
+    public void Run(Task task)
+    {
+        // Run only target thread.
+        var currentThreadId = this.GetCurrentThreadId();
+        if (currentThreadId != this.boundThreadId)
+        {
+            throw new InvalidOperationException(
+                $"Thread mismatch between created and running: Created={this.boundThreadId}, Running={currentThreadId}");
+        }
+
+        // Schedule task completion.
+        task?.ContinueWith(_ => this.OnShutdown(this.boundThreadId));
+
+        this.OnRun(
+            this.boundThreadId,
+            ex =>
+            {
+                var e = new UnhandledExceptionEventArgs(ex);
+                try
+                {
+                    this.UnhandledException?.Invoke(this, e);
+                }
+                catch (Exception ex2)
+                {
+                    Trace.WriteLine(ex2.ToString());
+                }
+                return e.Handled;
+            });
+    }
+
+    /// <summary>
+    /// Shutdown running context.
+    /// </summary>
+    public void Shutdown() =>
+        this.OnShutdown(this.boundThreadId);
 }
