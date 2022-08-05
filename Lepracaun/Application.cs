@@ -53,7 +53,7 @@ public class Application : IDisposable
         }
     }
 
-    private readonly ThreadBoundSynchronizationContext context;
+    private readonly IPassiveSynchronizationContext context;
 
     /// <summary>
     /// Constructor.
@@ -67,13 +67,14 @@ public class Application : IDisposable
     /// Constructor.
     /// </summary>
     /// <param name="context">Applicated synchronization context</param>
-    public Application(ThreadBoundSynchronizationContext context)
+    public Application(IPassiveSynchronizationContext context)
     {
         this.context = context;
         this.context.UnhandledException += this.OnUnhandledException!;
 
         Current = this;
-        SynchronizationContext.SetSynchronizationContext(this.context);
+        SynchronizationContext.SetSynchronizationContext(
+            (SynchronizationContext)this.context);
     }
 
     private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e) =>
@@ -110,7 +111,7 @@ public class Application : IDisposable
     /// Run the application.
     /// </summary>
     public void Run() =>
-        this.context.Run();
+        this.context.Run(null!);
 
     /// <summary>
     /// Run the application with first time task.
@@ -255,7 +256,7 @@ public class Application : IDisposable
 /// </summary>
 /// <typeparam name="TSynchronizationContext">Applicated synchronization context type</typeparam>
 public sealed class Application<TSynchronizationContext> : Application
-    where TSynchronizationContext : ThreadBoundSynchronizationContext, new()
+    where TSynchronizationContext : class, IPassiveSynchronizationContext, new()
 {
     /// <summary>
     /// Constructor.

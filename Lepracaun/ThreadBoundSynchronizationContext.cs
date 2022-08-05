@@ -20,10 +20,10 @@ using System.Runtime.ExceptionServices;
 namespace Lepracaun;
 
 /// <summary>
-/// Custom synchronization context implementation using Windows message queue (Win32)
+/// Leprecaun central synchronization context.
 /// </summary>
 public abstract class ThreadBoundSynchronizationContext :
-    SynchronizationContext
+    SynchronizationContext, ISynchronizationContext
 {
     /// <summary>
     /// This synchronization context bound thread id.
@@ -40,12 +40,6 @@ public abstract class ThreadBoundSynchronizationContext :
     /// </summary>
     protected ThreadBoundSynchronizationContext() =>
         this.boundThreadId = -1;
-
-    /// <summary>
-    /// Constructor.
-    /// </summary>
-    protected ThreadBoundSynchronizationContext(int targetThreadId) =>
-        this.boundThreadId = targetThreadId;
 
     protected void SetTargetThreadId(int targetThreadId)
     {
@@ -65,7 +59,7 @@ public abstract class ThreadBoundSynchronizationContext :
     /// <summary>
     /// Occurred unhandled exception event.
     /// </summary>
-    public EventHandler<UnhandledExceptionEventArgs>? UnhandledException;
+    public event EventHandler<UnhandledExceptionEventArgs>? UnhandledException;
 
     /// <summary>
     /// Check current context is bound this.
@@ -73,21 +67,6 @@ public abstract class ThreadBoundSynchronizationContext :
     /// <returns>True if bound this.</returns>
     public bool CheckAccess() =>
         this.GetCurrentThreadId() == this.boundThreadId;
-
-    /// <summary>
-    /// Copy this context.
-    /// </summary>
-    /// <param name="targetThreadId">Target thread identity</param>
-    /// <returns>Copied context.</returns>
-    protected abstract SynchronizationContext OnCreateCopy(
-        int targetThreadId);
-
-    /// <summary>
-    /// Copy this context.
-    /// </summary>
-    /// <returns>Copied context.</returns>
-    public override SynchronizationContext CreateCopy() =>
-        this.OnCreateCopy(this.boundThreadId);
 
     /// <summary>
     /// Get current thread identity.
@@ -240,14 +219,8 @@ public abstract class ThreadBoundSynchronizationContext :
     /// <summary>
     /// Execute message queue.
     /// </summary>
-    public void Run() =>
-        this.Run(null!);
-
-    /// <summary>
-    /// Execute message queue.
-    /// </summary>
     /// <param name="task">Completion awaiting task</param>
-    public void Run(Task task)
+    protected void Run(Task task)
     {
         // Run only target thread.
         var currentThreadId = this.GetCurrentThreadId();
@@ -264,7 +237,7 @@ public abstract class ThreadBoundSynchronizationContext :
     }
 
     /// <summary>
-    /// Shutdown running context.
+    /// Shutdown running context asynchronously.
     /// </summary>
     public void Shutdown() =>
         this.OnShutdown(this.boundThreadId);

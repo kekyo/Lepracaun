@@ -11,6 +11,7 @@ using Lepracaun.Internal;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Lepracaun;
 
@@ -18,7 +19,7 @@ namespace Lepracaun;
 /// Custom synchronization context implementation using Windows message queue (Win32)
 /// </summary>
 public sealed class Win32MessagingSynchronizationContext :
-    ThreadBoundSynchronizationContext
+    ThreadBoundSynchronizationContext, IPassiveSynchronizationContext
 {
     /// <summary>
     /// Internal uses Windows message number (Win32).
@@ -37,22 +38,18 @@ public sealed class Win32MessagingSynchronizationContext :
     /// <summary>
     /// Constructor.
     /// </summary>
-    public Win32MessagingSynchronizationContext() :
-        base(Win32NativeMethods.GetCurrentThreadId())
-    {
-    }
-
-    private Win32MessagingSynchronizationContext(int targetThreadId) :
-        base(targetThreadId)
-    {
-    }
+    public Win32MessagingSynchronizationContext() =>
+        this.SetTargetThreadId(Win32NativeMethods.GetCurrentThreadId());
 
     protected override int GetCurrentThreadId() =>
         Win32NativeMethods.GetCurrentThreadId();
 
-    protected override SynchronizationContext OnCreateCopy(
-        int targetThreadId) =>
-        new Win32MessagingSynchronizationContext(targetThreadId);
+    /// <summary>
+    /// Copy this context.
+    /// </summary>
+    /// <returns>Copied context.</returns>
+    public override SynchronizationContext CreateCopy() =>
+       new Win32MessagingSynchronizationContext();
 
     protected override void OnPost(
         int targetThreadId, SendOrPostCallback continuation, object? state)
@@ -127,4 +124,17 @@ public sealed class Win32MessagingSynchronizationContext :
         int targetThreadId) =>
         Win32NativeMethods.PostThreadMessage(
             targetThreadId, Win32NativeMethods.WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+
+    /// <summary>
+    /// Execute message queue.
+    /// </summary>
+    public void Run() =>
+        base.Run(null!);
+
+    /// <summary>
+    /// Execute message queue.
+    /// </summary>
+    /// <param name="task">Completion awaiting task</param>
+    public new void Run(Task task) =>
+        base.Run(task);
 }
