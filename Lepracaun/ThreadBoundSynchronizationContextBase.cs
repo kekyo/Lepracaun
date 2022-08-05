@@ -55,7 +55,7 @@ public abstract class ThreadBoundSynchronizationContextBase :
     /// Get bound thread identity.
     /// </summary>
     public int BoundIdentity =>
-        this.GetCurrentThreadId();
+        this.targetThreadId;
 
     /// <summary>
     /// Occurred unhandled exception event.
