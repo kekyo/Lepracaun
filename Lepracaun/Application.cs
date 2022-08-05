@@ -95,6 +95,13 @@ public class Application : IDisposable
         this.context.BoundIdentity;
 
     /// <summary>
+    /// Check current context is bound this.
+    /// </summary>
+    /// <returns>True if bound this.</returns>
+    public bool CheckAccess() =>
+        this.context.CheckAccess();
+
+    /// <summary>
     /// Occurred unhandled exception event.
     /// </summary>
     public EventHandler<UnhandledExceptionEventArgs>? UnhandledException;
