@@ -63,6 +63,13 @@ public abstract class ThreadBoundSynchronizationContextBase :
     public EventHandler<UnhandledExceptionEventArgs>? UnhandledException;
 
     /// <summary>
+    /// Check current context is bound this.
+    /// </summary>
+    /// <returns>True if bound this.</returns>
+    public bool CheckAccess() =>
+        this.GetCurrentThreadId() == this.targetThreadId;
+
+    /// <summary>
     /// Copy this context.
     /// </summary>
     /// <param name="targetThreadId">Target thread identity</param>
