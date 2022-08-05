@@ -69,7 +69,7 @@ public sealed class Win32MessagingSynchronizationContext :
     }
 
     protected override void OnRun(
-        int targetThreadId, Func<Exception, bool> onUnhandledException)
+        int targetThreadId)
     {
         // Run message loop (very legacy knowledge...)
         while (true)
@@ -108,18 +108,8 @@ public sealed class Win32MessagingSynchronizationContext :
                 continuationHandle.Free();
                 stateHandle.Free();
 
-                try
-                {
-                    // Invoke continuation.
-                    continuation(state);
-                }
-                catch (Exception ex)
-                {
-                    if (!onUnhandledException(ex))
-                    {
-                        throw;
-                    }
-                }
+                // Invoke continuation.
+                this.OnInvoke(continuation, state);
 
                 // Consumed message.
                 continue;

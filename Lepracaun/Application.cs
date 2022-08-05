@@ -59,7 +59,7 @@ public class Application : IDisposable
     /// Constructor.
     /// </summary>
     public Application() :
-        this(new SingleThreadSynchronizationContext())
+        this(new SingleThreadedSynchronizationContext())
     {
     }
 

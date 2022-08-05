@@ -9,19 +9,15 @@
 
 using System;
 using System.Diagnostics;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
+#if !NET35 && !NET40
+using System.Runtime.ExceptionServices;
+#endif
+
 namespace Lepracaun;
-
-public sealed class UnhandledExceptionEventArgs : EventArgs
-{
-    public readonly Exception Exception;
-    public bool Handled;
-
-    public UnhandledExceptionEventArgs(Exception ex) =>
-        this.Exception = ex;
-}
 
 /// <summary>
 /// Custom synchronization context implementation using Windows message queue (Win32)
@@ -112,9 +108,8 @@ public abstract class ThreadBoundSynchronizationContext :
     /// Execute message queue.
     /// </summary>
     /// <param name="targetThreadId">Target thread identity.</param>
-    /// <param name="onUnhandledException">Occurred unhandled exception handler</param>
     protected abstract void OnRun(
-        int targetThreadId, Func<Exception, bool> onUnhandledException);
+        int targetThreadId);
 
     /// <summary>
     /// Shutdown requested.
@@ -122,6 +117,30 @@ public abstract class ThreadBoundSynchronizationContext :
     /// <param name="targetThreadId">Target thread identity.</param>
     protected abstract void OnShutdown(
         int targetThreadId);
+
+    protected void OnInvoke(SendOrPostCallback continuation, object? state)
+    {
+        try
+        {
+            continuation(state);
+        }
+        catch (Exception ex)
+        {
+            var e = new UnhandledExceptionEventArgs(ex);
+            try
+            {
+                this.UnhandledException?.Invoke(this, e);
+            }
+            catch (Exception ex2)
+            {
+                Trace.WriteLine(ex2.ToString());
+            }
+            if (!e.Handled)
+            {
+                throw;
+            }
+        }
+    }
 
     /// <summary>
     /// Send continuation into synchronization context.
@@ -135,31 +154,52 @@ public abstract class ThreadBoundSynchronizationContext :
         if (currentThreadId == this.boundThreadId)
         {
             // Invoke continuation on current thread.
-            continuation(state);
-
+            this.OnInvoke(continuation, state);
             return;
         }
 
         using var mre = new ManualResetEventSlim(false);
+#if NET35 || NET40
+        Exception? edi = null;
+#else
+        ExceptionDispatchInfo? edi = null;
+#endif
 
         // Marshal to.
-        this.OnPost(this.boundThreadId, state =>
+        this.OnPost(this.boundThreadId, _ =>
         {
             try
             {
-                continuation(state);
+                this.OnInvoke(continuation, state);
+            }
+            catch (Exception ex)
+            {
+#if NET35 || NET40
+                edi = ex;
+#else
+                edi = ExceptionDispatchInfo.Capture(ex);
+#endif
             }
             finally
             {
                 mre.Set();
             }
-        }, state);
+        }, null);
 
         // Yes, this can easily cause a deadlock on UI threads:
         // * But as long as the Send() method requires blocking, we have no choice.
         // * If this context is bound to the UI thread itself,
         //   it is no problem, as it will be bypassed by the if block above.
         mre.Wait();
+
+        if (edi != null)
+        {
+#if NET35 || NET40
+            throw new TargetInvocationException(edi);
+#else
+            edi.Throw();
+#endif
+        }
     }
 
     /// <summary>
@@ -181,11 +221,15 @@ public abstract class ThreadBoundSynchronizationContext :
             if (recursiveCount < 50)
             {
                 recursiveCount++;
-
-                // Invoke continuation on current thread is better performance.
-                continuation(state);
-
-                recursiveCount--;
+                try
+                {
+                    // Invoke continuation on current thread is better performance.
+                    this.OnInvoke(continuation, state);
+                }
+                finally
+                {
+                    recursiveCount--;
+                }
                 return;
             }
         }
@@ -216,21 +260,7 @@ public abstract class ThreadBoundSynchronizationContext :
         // Schedule task completion.
         task?.ContinueWith(_ => this.OnShutdown(this.boundThreadId));
 
-        this.OnRun(
-            this.boundThreadId,
-            ex =>
-            {
-                var e = new UnhandledExceptionEventArgs(ex);
-                try
-                {
-                    this.UnhandledException?.Invoke(this, e);
-                }
-                catch (Exception ex2)
-                {
-                    Trace.WriteLine(ex2.ToString());
-                }
-                return e.Handled;
-            });
+        this.OnRun(this.boundThreadId);
     }
 
     /// <summary>

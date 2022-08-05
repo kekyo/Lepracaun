@@ -7,7 +7,7 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////
 
-using System;
+using Lepracaun.Internal;
 using System.Collections.Concurrent;
 using System.Threading;
 
@@ -16,15 +16,9 @@ namespace Lepracaun;
 /// <summary>
 /// Custom synchronization context implementation using BlockingCollection.
 /// </summary>
-public sealed class SingleThreadSynchronizationContext :
+public sealed class SingleThreadedSynchronizationContext :
     ThreadBoundSynchronizationContext
 {
-    private struct ContinuationInformation
-    {
-        public SendOrPostCallback Continuation;
-        public object? State;
-    }
-
     /// <summary>
     /// Continuation queue.
     /// </summary>
@@ -33,12 +27,12 @@ public sealed class SingleThreadSynchronizationContext :
     /// <summary>
     /// Constructor.
     /// </summary>
-    public SingleThreadSynchronizationContext() :
+    public SingleThreadedSynchronizationContext() :
         base(Thread.CurrentThread.ManagedThreadId)
     {
     }
 
-    private SingleThreadSynchronizationContext(int targetThreadId) :
+    private SingleThreadedSynchronizationContext(int targetThreadId) :
         base(targetThreadId)
     {
     }
@@ -47,7 +41,7 @@ public sealed class SingleThreadSynchronizationContext :
         Thread.CurrentThread.ManagedThreadId;
 
     protected override SynchronizationContext OnCreateCopy(int targetThreadId) =>
-        new SingleThreadSynchronizationContext(targetThreadId);
+        new SingleThreadedSynchronizationContext(targetThreadId);
 
     protected override void OnPost(
         int targetThreadId, SendOrPostCallback continuation, object? state)
@@ -57,23 +51,15 @@ public sealed class SingleThreadSynchronizationContext :
     }
 
     protected override void OnRun(
-        int targetThreadId, Func<Exception, bool> onUnhandledException)
+        int targetThreadId)
     {
         // Run queue consumer.
         foreach (var continuationInformation in this.queue.GetConsumingEnumerable())
         {
-            try
-            {
-                // Invoke continuation.
-                continuationInformation.Continuation(continuationInformation.State);
-            }
-            catch (Exception ex)
-            {
-                if (!onUnhandledException(ex))
-                {
-                    throw;
-                }
-            }
+            // Invoke continuation.
+            this.OnInvoke(
+                continuationInformation.Continuation,
+                continuationInformation.State);
         }
     }
 
