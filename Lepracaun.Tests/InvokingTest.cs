@@ -78,11 +78,11 @@ public sealed class InvokingTests
 
         app.Run(async () =>
         {
-            for (var index = 0; index < 10000; index++)
+            for (var index = 0; index < 1000000; index++)
             {
                 await Task.Yield();
 
-                AreEqual(id, Application.Current.BoundIdentity);
+                AreEqual(id, Thread.CurrentThread.ManagedThreadId);
             }
         });
     }

@@ -7,7 +7,9 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////
 
+using Lepracaun.Internal;
 using NUnit.Framework;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -18,13 +20,13 @@ namespace Lepracaun;
 [TestFixture]
 public sealed class ThreadBoundTests
 {
-    private static async Task TestBodyAsync(int threadId)
+    private static async Task TestBodyAsync(int threadId, Func<int> getter)
     {
-        AreEqual(threadId, Application.Current.BoundIdentity);
+        AreEqual(threadId, getter());
 
         await Task.Delay(100);
 
-        AreEqual(threadId, Application.Current.BoundIdentity);
+        AreEqual(threadId, getter());
     }
 
     [Test]
@@ -34,7 +36,7 @@ public sealed class ThreadBoundTests
 
         var app = new Application();
 
-        app.Run(TestBodyAsync(app.BoundIdentity));
+        app.Run(TestBodyAsync(app.BoundIdentity, () => Thread.CurrentThread.ManagedThreadId));
     }
 
     [Test]
@@ -45,6 +47,6 @@ public sealed class ThreadBoundTests
         var app = new Application(
             new Win32MessagingSynchronizationContext());
 
-        app.Run(TestBodyAsync(app.BoundIdentity));
+        app.Run(TestBodyAsync(app.BoundIdentity, () => Win32NativeMethods.GetCurrentThreadId()));
     }
 }
