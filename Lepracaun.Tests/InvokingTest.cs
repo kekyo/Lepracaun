@@ -17,7 +17,7 @@ using static NUnit.Framework.Assert;
 namespace Lepracaun;
 
 [TestFixture]
-public sealed class Win32MessagingSynchronizationContextTests
+public sealed class InvokingTests
 {
     private static async Task TestBodyAsync()
     {
@@ -51,6 +51,8 @@ public sealed class Win32MessagingSynchronizationContextTests
     [Test]
     public void RunTest1()
     {
+        IsNull(SynchronizationContext.Current);
+
         var app = new Application();
 
         app.Run(TestBodyAsync());
@@ -59,8 +61,29 @@ public sealed class Win32MessagingSynchronizationContextTests
     [Test]
     public void RunTest2()
     {
+        IsNull(SynchronizationContext.Current);
+
         var app = new Application();
 
         app.Run(() => TestBodyAsync());
+    }
+
+    [Test]
+    public void RunManyInvoking()
+    {
+        IsNull(SynchronizationContext.Current);
+
+        var app = new Application();
+        var id = app.BoundIdentity;
+
+        app.Run(async () =>
+        {
+            for (var index = 0; index < 10000; index++)
+            {
+                await Task.Yield();
+
+                AreEqual(id, Application.Current.BoundIdentity);
+            }
+        });
     }
 }
