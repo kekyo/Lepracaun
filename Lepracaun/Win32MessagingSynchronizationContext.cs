@@ -19,7 +19,7 @@ namespace Lepracaun;
 /// Custom synchronization context implementation using Windows message queue (Win32)
 /// </summary>
 public sealed class Win32MessagingSynchronizationContext :
-    ThreadBoundSynchronizationContext, IPassiveSynchronizationContext
+    ThreadBoundSynchronizationContext, ISynchronizationContext
 {
     /// <summary>
     /// Internal uses Windows message number (Win32).

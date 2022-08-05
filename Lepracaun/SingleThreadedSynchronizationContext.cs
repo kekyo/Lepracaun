@@ -16,7 +16,7 @@ namespace Lepracaun;
 /// Custom synchronization context implementation running on current thread.
 /// </summary>
 public sealed class SingleThreadedSynchronizationContext :
-    ManagedThreadSynchronizationContext, IPassiveSynchronizationContext
+    ManagedThreadSynchronizationContext, ISynchronizationContext
 {
     /// <summary>
     /// Constructor.

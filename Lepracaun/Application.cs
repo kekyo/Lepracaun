@@ -53,7 +53,7 @@ public class Application : IDisposable
         }
     }
 
-    private readonly IPassiveSynchronizationContext context;
+    private readonly ISynchronizationContext context;
 
     /// <summary>
     /// Constructor.
@@ -67,7 +67,7 @@ public class Application : IDisposable
     /// Constructor.
     /// </summary>
     /// <param name="context">Applicated synchronization context</param>
-    public Application(IPassiveSynchronizationContext context)
+    public Application(ISynchronizationContext context)
     {
         this.context = context;
         this.context.UnhandledException += this.OnUnhandledException!;
@@ -256,7 +256,7 @@ public class Application : IDisposable
 /// </summary>
 /// <typeparam name="TSynchronizationContext">Applicated synchronization context type</typeparam>
 public sealed class Application<TSynchronizationContext> : Application
-    where TSynchronizationContext : class, IPassiveSynchronizationContext, new()
+    where TSynchronizationContext : class, ISynchronizationContext, new()
 {
     /// <summary>
     /// Constructor.

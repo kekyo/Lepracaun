@@ -9,6 +9,7 @@
 
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Lepracaun;
 
@@ -46,4 +47,20 @@ public interface ISynchronizationContext
     /// <param name="continuation">Continuation callback delegate.</param>
     /// <param name="state">Continuation argument.</param>
     void Post(SendOrPostCallback continuation, object? state);
+
+    /// <summary>
+    /// Execute message queue.
+    /// </summary>
+    void Run();
+
+    /// <summary>
+    /// Execute message queue.
+    /// </summary>
+    /// <param name="task">Completion awaiting task</param>
+    void Run(Task task);
+
+    /// <summary>
+    /// Shutdown running context asynchronously.
+    /// </summary>
+    void Shutdown();
 }

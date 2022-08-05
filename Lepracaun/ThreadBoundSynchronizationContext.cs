@@ -23,7 +23,7 @@ namespace Lepracaun;
 /// Leprecaun central synchronization context.
 /// </summary>
 public abstract class ThreadBoundSynchronizationContext :
-    SynchronizationContext, ISynchronizationContext
+    SynchronizationContext
 {
     /// <summary>
     /// This synchronization context bound thread id.

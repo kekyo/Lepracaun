@@ -8,6 +8,7 @@
 /////////////////////////////////////////////////////////////////////////////////////
 
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Lepracaun;
 
@@ -41,4 +42,17 @@ public sealed class WorkerThreadedSynchronizationContext :
     /// </summary>
     public void Start() =>
         this.thread.Start();
+
+    /// <summary>
+    /// Execute message queue.
+    /// </summary>
+    public void Run() =>
+        base.Run(null!);
+
+    /// <summary>
+    /// Execute message queue.
+    /// </summary>
+    /// <param name="task">Completion awaiting task</param>
+    public new void Run(Task task) =>
+        base.Run(task);
 }

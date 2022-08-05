@@ -21,9 +21,4 @@ public interface IActiveSynchronizationContext :
     /// Execute message queue on background.
     /// </summary>
     void Start();
-
-    /// <summary>
-    /// Shutdown running context asynchronously.
-    /// </summary>
-    void Shutdown();
 }
