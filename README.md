@@ -26,10 +26,11 @@ Lepracaun is a library that collection of .NET Synchronization Context. It is a 
 
 |Class|Detail|
 |:----|:----|
-|`ThreadBoundSynchronizationContext`|That constrains the execution context to a single thread using the `BlockingCollection` class.|
+|`SingleThreadedSynchronizationContext`|That constrains the execution context to a single thread using the `BlockingCollection` class.|
 |`Win32MessagingSynchronizationContext`|That constrains the execution context to a single thread using the Win32 message pumps.|
+|`WorkerThreadSynchronizationContext`|Create a worker thread and running on it.|
 |TODO:|TODO:|
-|`Application`|Pseudo (WPF/WinForms like) the Application class. Will use `ThreadBoundSynchronizationContext` defaulted.|
+|`Application`|Pseudo (WPF/WinForms like) the Application class. Will use `SingleThreadedSynchronizationContext` defaulted.|
 
 ### Operating Environment
 
