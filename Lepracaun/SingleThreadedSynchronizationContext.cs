@@ -22,26 +22,25 @@ public sealed class SingleThreadedSynchronizationContext :
     /// <summary>
     /// Continuation queue.
     /// </summary>
-    private readonly BlockingCollection<ContinuationInformation> queue = new();
+    private readonly BlockingCollection<ContinuationInformation> queue;
 
     /// <summary>
     /// Constructor.
     /// </summary>
     public SingleThreadedSynchronizationContext() :
-        base(Thread.CurrentThread.ManagedThreadId)
-    {
-    }
+        base(Thread.CurrentThread.ManagedThreadId) =>
+        this.queue = new();
 
-    private SingleThreadedSynchronizationContext(int targetThreadId) :
-        base(targetThreadId)
-    {
-    }
+    private SingleThreadedSynchronizationContext(
+        int targetThreadId, BlockingCollection<ContinuationInformation> queue) :
+        base(targetThreadId) =>
+        this.queue = queue;
 
     protected override int GetCurrentThreadId() =>
         Thread.CurrentThread.ManagedThreadId;
 
     protected override SynchronizationContext OnCreateCopy(int targetThreadId) =>
-        new SingleThreadedSynchronizationContext(targetThreadId);
+        new SingleThreadedSynchronizationContext(targetThreadId, this.queue);
 
     protected override void OnPost(
         int targetThreadId, SendOrPostCallback continuation, object? state)
