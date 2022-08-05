@@ -104,6 +104,9 @@ Apache-v2.
 
 ## History
 
+* 0.2.0:
+  * Added CheckAccess method.
+  * Fixed returns invalid identity.
 * 0.1.0:
   * Initial stable release.
   * Added pseudo `Application` class.
