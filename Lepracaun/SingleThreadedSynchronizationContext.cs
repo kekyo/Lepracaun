@@ -16,7 +16,7 @@ namespace Lepracaun;
 /// Custom synchronization context implementation running on current thread.
 /// </summary>
 public sealed class SingleThreadedSynchronizationContext :
-    ManagedThreadSynchronizationContext, ISynchronizationContext
+    ManagedThreadSynchronizationContext
 {
     /// <summary>
     /// Constructor.
@@ -30,17 +30,4 @@ public sealed class SingleThreadedSynchronizationContext :
     /// <returns>Copied context.</returns>
     public override SynchronizationContext CreateCopy() =>
        new SingleThreadedSynchronizationContext();
-
-    /// <summary>
-    /// Execute message queue.
-    /// </summary>
-    public void Run() =>
-        base.Run(null!);
-
-    /// <summary>
-    /// Execute message queue.
-    /// </summary>
-    /// <param name="task">Completion awaiting task</param>
-    public new void Run(Task task) =>
-        base.Run(task);
 }

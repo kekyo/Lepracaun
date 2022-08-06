@@ -15,17 +15,21 @@ namespace Lepracaun;
 /// <summary>
 /// Custom synchronization context implementation using separated worker thread.
 /// </summary>
-public sealed class WorkerThreadedSynchronizationContext :
-    ManagedThreadSynchronizationContext, IActiveSynchronizationContext
+public sealed class WorkerThreadSynchronizationContext :
+    ManagedThreadSynchronizationContext
 {
     private readonly Thread thread;
 
     /// <summary>
     /// Constructor.
     /// </summary>
-    public WorkerThreadedSynchronizationContext()
+    public WorkerThreadSynchronizationContext()
     {
-        this.thread = new(() => base.Run(null!));
+        this.thread = new(() =>
+        {
+            SetSynchronizationContext(this);
+            base.Run(null!);
+        });
         this.thread.IsBackground = true;
         base.SetTargetThreadId(this.thread.ManagedThreadId);
     }
@@ -35,24 +39,22 @@ public sealed class WorkerThreadedSynchronizationContext :
     /// </summary>
     /// <returns>Copied context.</returns>
     public override SynchronizationContext CreateCopy() =>
-       new WorkerThreadedSynchronizationContext();
-
-    /// <summary>
-    /// Execute message queue on background.
-    /// </summary>
-    public void Start() =>
-        this.thread.Start();
-
-    /// <summary>
-    /// Execute message queue.
-    /// </summary>
-    public void Run() =>
-        base.Run(null!);
+       new WorkerThreadSynchronizationContext();
 
     /// <summary>
     /// Execute message queue.
     /// </summary>
     /// <param name="task">Completion awaiting task</param>
-    public new void Run(Task task) =>
-        base.Run(task);
+    public override void Run(Task task)
+    {
+        // Schedule task completion.
+        task?.ContinueWith(_ => this.OnShutdown(this.BoundIdentity));
+        this.thread.Start();
+    }
+
+    /// <summary>
+    /// Execute message queue on background.
+    /// </summary>
+    public override void Run() =>
+        this.thread.Start();
 }

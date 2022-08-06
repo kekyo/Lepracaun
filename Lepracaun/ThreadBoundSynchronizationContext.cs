@@ -220,7 +220,7 @@ public abstract class ThreadBoundSynchronizationContext :
     /// Execute message queue.
     /// </summary>
     /// <param name="task">Completion awaiting task</param>
-    protected void Run(Task task)
+    public virtual void Run(Task task)
     {
         // Run only target thread.
         var currentThreadId = this.GetCurrentThreadId();
@@ -235,6 +235,12 @@ public abstract class ThreadBoundSynchronizationContext :
 
         this.OnRun(this.boundThreadId);
     }
+
+    /// <summary>
+    /// Execute message queue.
+    /// </summary>
+    public virtual void Run() =>
+        this.Run(null!);
 
     /// <summary>
     /// Shutdown running context asynchronously.
