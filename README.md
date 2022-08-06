@@ -26,7 +26,7 @@ Lepracaun is a library that collection of .NET Synchronization Context. It is a 
 
 |Class|Detail|
 |:----|:----|
-|`SingleThreadedSynchronizationContext`|That constrains the execution context to a single thread using the `BlockingCollection` class.|
+|`SingleThreadedSynchronizationContext`|That constrains the execution context to a single thread using simple queue.|
 |`Win32MessagingSynchronizationContext`|That constrains the execution context to a single thread using the Win32 message pumps.|
 |`WorkerThreadSynchronizationContext`|Create a worker thread and running on it.|
 |TODO:|TODO:|
@@ -41,7 +41,54 @@ The following platforms are supported by the package.
 * NET Standard 2.1, 2.0, 1.6, 1.3
 * NET Framework 4.8, 4.6.1, 4.5, 4.0, 3.5
 
-## Samples
+----
+
+## Basic usage
+
+### Single threaded
+
+```csharp
+// Allocate and assigned:
+using var sc = new SingleThreadedSynchronizationContext();
+SynchronizationContext.SetSynchronizationContext(sc);
+
+// Use it directly (Post is asynchronously, so will delay execution.)
+var origin = Thread.CurrentThread.ManagedThreadId;
+sc.Post(_ =>
+{
+    var current = Thread.CurrentThread.ManagedThreadId;
+    Console.WriteLine($"{origin} ==> {current}");
+}, null);
+
+// Run it:
+sc.Run();
+```
+
+### Worker thread
+
+```csharp
+// Allocate and assigned:
+using var sc = new WorkerThreadSynchronizationContext();
+SynchronizationContext.SetSynchronizationContext(sc);
+
+// Use it directly (Post is asynchronously, so will delay execution.)
+var origin = Thread.CurrentThread.ManagedThreadId;
+sc.Post(_ =>
+{
+    var current = Thread.CurrentThread.ManagedThreadId;
+    Console.WriteLine($"{origin} ==> {current}");
+}, null);
+
+// Run it (Worker thread will run background.)
+sc.Run();
+
+// (Wait until consume.)
+Thread.Sleep(1000);
+```
+
+----
+
+## Realistic samples
 
 ### Main thread bound asynchronous operation
 
@@ -49,6 +96,9 @@ The following platforms are supported by the package.
 public static void Main(string[] args)
 {
     using var app = new Application();
+
+    //using var app = new Application(
+    //    new SingleThreadedSynchronizationContext());
 
     app.Run(async () =>
     {
@@ -105,6 +155,8 @@ Apache-v2.
 
 ## History
 
+* 0.3.0:
+  * Added feature of worker thread bound.
 * 0.2.0:
   * Added CheckAccess method.
   * Fixed returns invalid identity.
