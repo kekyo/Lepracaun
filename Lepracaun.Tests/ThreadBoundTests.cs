@@ -27,6 +27,10 @@ public sealed class ThreadBoundTests
         await Task.Delay(100);
 
         AreEqual(threadId, getter());
+
+        await Task.Delay(100);
+
+        AreEqual(threadId, getter());
     }
 
     [Test]
@@ -34,7 +38,7 @@ public sealed class ThreadBoundTests
     {
         IsNull(SynchronizationContext.Current);
 
-        var app = new Application();
+        using var app = new Application();
 
         app.Run(TestBodyAsync(app.BoundIdentity, () => Thread.CurrentThread.ManagedThreadId));
     }
@@ -44,9 +48,38 @@ public sealed class ThreadBoundTests
     {
         IsNull(SynchronizationContext.Current);
 
-        var app = new Application(
+        using var app = new Application(
             new Win32MessagingSynchronizationContext());
 
         app.Run(TestBodyAsync(app.BoundIdentity, () => Win32NativeMethods.GetCurrentThreadId()));
+    }
+
+    private static async Task WorkerTestBodyAsync(int threadId)
+    {
+        AreNotEqual(threadId, Thread.CurrentThread.ManagedThreadId);
+
+        await Task.Delay(100);
+
+        AreEqual(threadId, Thread.CurrentThread.ManagedThreadId);
+
+        await Task.Delay(100);
+
+        AreEqual(threadId, Thread.CurrentThread.ManagedThreadId);
+    }
+
+    [Test]
+    public async Task WorkerThreadBoundTest()
+    {
+        IsNull(SynchronizationContext.Current);
+
+        using var app = new Application(
+            new WorkerThreadSynchronizationContext());
+
+        var task = WorkerTestBodyAsync(
+            app.BoundIdentity);
+
+        app.Run(task);
+
+        await task;
     }
 }
