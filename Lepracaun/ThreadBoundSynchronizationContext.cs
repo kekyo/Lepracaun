@@ -97,6 +97,36 @@ public abstract class ThreadBoundSynchronizationContext :
     protected abstract void OnShutdown(
         int targetThreadId);
 
+    private bool InvokeUnhandledException(Exception ex)
+    {
+        UnhandledExceptionEventArgs e;
+        if (ex is AggregateException aex &&
+            aex.InnerExceptions.Count == 1)
+        {
+            e = new(aex.InnerExceptions[0]);
+        }
+        else if (ex is TargetInvocationException tex &&
+            tex.InnerException != null)
+        {
+            e = new(tex.InnerException);
+        }
+        else
+        {
+            e = new(ex);
+        }
+
+        try
+        {
+            this.UnhandledException?.Invoke(this, e);
+        }
+        catch (Exception ex2)
+        {
+            Trace.WriteLine(ex2.ToString());
+        }
+
+        return e.Handled;
+    }
+
     protected void OnInvoke(SendOrPostCallback continuation, object? state)
     {
         try
@@ -105,16 +135,7 @@ public abstract class ThreadBoundSynchronizationContext :
         }
         catch (Exception ex)
         {
-            var e = new UnhandledExceptionEventArgs(ex);
-            try
-            {
-                this.UnhandledException?.Invoke(this, e);
-            }
-            catch (Exception ex2)
-            {
-                Trace.WriteLine(ex2.ToString());
-            }
-            if (!e.Handled)
+            if (!this.InvokeUnhandledException(ex))
             {
                 throw;
             }
@@ -231,7 +252,19 @@ public abstract class ThreadBoundSynchronizationContext :
         }
 
         // Schedule task completion.
-        task?.ContinueWith(_ => this.OnShutdown(this.boundThreadId));
+        task?.ContinueWith(t =>
+        {
+            if (t.IsCanceled)
+            {
+                this.InvokeUnhandledException(t.Exception!);
+            }
+            else if (t.IsFaulted)
+            {
+                this.InvokeUnhandledException(t.Exception!);
+            }
+
+            this.OnShutdown(this.boundThreadId);
+        });
 
         this.OnRun(this.boundThreadId);
     }
