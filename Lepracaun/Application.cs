@@ -105,7 +105,7 @@ public class Application : IDisposable
     /// <summary>
     /// Occurred unhandled exception event.
     /// </summary>
-    public EventHandler<UnhandledExceptionEventArgs>? UnhandledException;
+    public event EventHandler<UnhandledExceptionEventArgs>? UnhandledException;
 
     /// <summary>
     /// Run the application.
