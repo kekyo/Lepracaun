@@ -53,7 +53,7 @@ public sealed class InvokingTests
     {
         IsNull(SynchronizationContext.Current);
 
-        var app = new Application();
+        using var app = new Application();
 
         app.Run(TestBodyAsync());
     }
@@ -63,7 +63,7 @@ public sealed class InvokingTests
     {
         IsNull(SynchronizationContext.Current);
 
-        var app = new Application();
+        using var app = new Application();
 
         app.Run(() => TestBodyAsync());
     }
@@ -73,7 +73,7 @@ public sealed class InvokingTests
     {
         IsNull(SynchronizationContext.Current);
 
-        var app = new Application();
+        using var app = new Application();
         var id = app.BoundIdentity;
 
         app.Run(async () =>
@@ -92,7 +92,7 @@ public sealed class InvokingTests
     {
         IsNull(SynchronizationContext.Current);
 
-        var app = new Application();
+        using var app = new Application();
 
         Exception? ex = null;
         app.UnhandledException += (s, e) =>
@@ -113,7 +113,7 @@ public sealed class InvokingTests
     {
         IsNull(SynchronizationContext.Current);
 
-        var app = new Application();
+        using var app = new Application();
 
         Exception? ex = null;
         app.UnhandledException += (s, e) =>
@@ -133,7 +133,7 @@ public sealed class InvokingTests
     {
         IsNull(SynchronizationContext.Current);
 
-        var app = new Application();
+        using var app = new Application();
 
         Exception? ex = null;
         app.UnhandledException += (s, e) =>
