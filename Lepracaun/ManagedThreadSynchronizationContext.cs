@@ -8,7 +8,7 @@
 /////////////////////////////////////////////////////////////////////////////////////
 
 using Lepracaun.Internal;
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
 
 namespace Lepracaun;
@@ -22,7 +22,17 @@ public abstract class ManagedThreadSynchronizationContext :
     /// <summary>
     /// Continuation queue.
     /// </summary>
-    private readonly BlockingCollection<ContinuationInformation> queue = new();
+    private readonly Queue<ContinuationInformation> queue = new();
+
+    /// <summary>
+    /// Flag for continuation availability.
+    /// </summary>
+    private readonly ManualResetEventSlim available = new();
+
+    /// <summary>
+    /// Flag for finalized.
+    /// </summary>
+    private bool completeAdding;
 
     /// <summary>
     /// Constructor.
@@ -38,25 +48,55 @@ public abstract class ManagedThreadSynchronizationContext :
         int targetThreadId, SendOrPostCallback continuation, object? state)
     {
         // Add continuation information into queue.
-        this.queue.Add(new ContinuationInformation
-            { Continuation = continuation, State = state });
+        var entry = new ContinuationInformation
+            { Continuation = continuation, State = state };
+        lock (this.queue)
+        {
+            this.queue.Enqueue(entry);
+            if (this.queue.Count == 1)
+            {
+                this.available.Set();
+            }
+        }
     }
 
     protected override sealed void OnRun(
         int targetThreadId)
     {
         // Run queue consumer.
-        foreach (var continuationInformation in
-            this.queue.GetConsumingEnumerable())
+        while (true)
         {
+            this.available.Wait();
+
+            ContinuationInformation entry;
+            lock (this.queue)
+            {
+                if (this.queue.Count == 0)
+                {
+                    this.available.Reset();
+                    if (this.completeAdding)
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
+                entry = this.queue.Dequeue();
+            }
+
             // Invoke continuation.
             this.OnInvoke(
-                continuationInformation.Continuation,
-                continuationInformation.State);
+                entry.Continuation,
+                entry.State);
         }
     }
 
     protected override sealed void OnShutdown(
-        int targetThreadId) =>
-        this.queue.CompleteAdding();
+        int targetThreadId)
+    {
+        this.completeAdding = true;
+        this.available.Set();
+    }
 }
