@@ -7,9 +7,15 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////
 
+using System;
 using Lepracaun.Internal;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Threading;
+
+#if !NET35 && !NET40
+using System.Runtime.ExceptionServices;
+#endif
 
 namespace Lepracaun;
 
@@ -33,6 +39,11 @@ public abstract class ManagedThreadSynchronizationContext :
     /// Flag for finalized.
     /// </summary>
     private bool completeAdding;
+
+    /// <summary>
+    /// Finalized with an exception.
+    /// </summary>
+    private Exception? completeWithException;
 
     /// <summary>
     /// Constructor.
@@ -91,11 +102,22 @@ public abstract class ManagedThreadSynchronizationContext :
                 entry.Continuation,
                 entry.State);
         }
+
+        if (this.completeWithException is { } ex)
+        {
+#if NET35 || NET40
+            throw new TargetInvocationException(ex);
+#else
+            var edi = ExceptionDispatchInfo.Capture(ex);
+            edi.Throw();
+#endif
+        }
     }
 
     protected override sealed void OnShutdown(
-        int targetThreadId)
+        int targetThreadId, Exception? ex)
     {
+        this.completeWithException = ex;
         this.completeAdding = true;
         this.available.Set();
     }
