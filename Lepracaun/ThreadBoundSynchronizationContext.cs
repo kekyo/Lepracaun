@@ -17,6 +17,8 @@ using System.Threading.Tasks;
 using System.Runtime.ExceptionServices;
 #endif
 
+#pragma warning disable CS0618
+
 namespace Lepracaun;
 
 /// <summary>
@@ -94,27 +96,31 @@ public abstract class ThreadBoundSynchronizationContext :
     /// Shutdown requested.
     /// </summary>
     /// <param name="targetThreadId">Target thread identity.</param>
+    [Obsolete("Use OnShutdown with exception overload instead.")]
+    protected virtual void OnShutdown(
+        int targetThreadId) =>
+        this.OnShutdown(targetThreadId, null);
+
+    /// <summary>
+    /// Shutdown requested.
+    /// </summary>
+    /// <param name="targetThreadId">Target thread identity.</param>
+    /// <param name="ex">Exception when shutdown reason</param>
     protected abstract void OnShutdown(
-        int targetThreadId);
+        int targetThreadId, Exception? ex);
+
+    private Exception UnwrapIfRequired(Exception ex) =>
+        ex switch
+        {
+            AggregateException aex when aex.InnerExceptions.Count == 1 => aex.InnerExceptions[0],
+            TargetInvocationException tex when tex.InnerException != null => tex.InnerException,
+            _ => ex,
+        };
 
     private bool InvokeUnhandledException(Exception ex)
     {
-        UnhandledExceptionEventArgs e;
-        if (ex is AggregateException aex &&
-            aex.InnerExceptions.Count == 1)
-        {
-            e = new(aex.InnerExceptions[0]);
-        }
-        else if (ex is TargetInvocationException tex &&
-            tex.InnerException != null)
-        {
-            e = new(tex.InnerException);
-        }
-        else
-        {
-            e = new(ex);
-        }
-
+        var e = new UnhandledExceptionEventArgs(ex);
+        
         try
         {
             this.UnhandledException?.Invoke(this, e);
@@ -135,7 +141,7 @@ public abstract class ThreadBoundSynchronizationContext :
         }
         catch (Exception ex)
         {
-            if (!this.InvokeUnhandledException(ex))
+            if (!this.InvokeUnhandledException(UnwrapIfRequired(ex)))
             {
                 throw;
             }
@@ -236,6 +242,34 @@ public abstract class ThreadBoundSynchronizationContext :
 
         this.OnPost(this.boundThreadId, continuation, state);
     }
+    
+    /// <summary>
+    /// Schedule task final completion.
+    /// </summary>
+    /// <param name="task">Task</param>
+    protected void HookTaskFinalizer(Task? task) =>
+        task?.ContinueWith(t =>
+        {
+            if (t.IsCanceled)
+            {
+                var ex = UnwrapIfRequired(t.Exception!);
+                if (!this.InvokeUnhandledException(ex))
+                {
+                    this.OnShutdown(this.boundThreadId, ex);
+                    return;
+                }
+            }
+            else if (t.IsFaulted)
+            {
+                var ex = UnwrapIfRequired(t.Exception!);
+                if (!this.InvokeUnhandledException(ex))
+                {
+                    this.OnShutdown(this.boundThreadId, ex);
+                    return;
+                }
+            }
+            this.OnShutdown(this.boundThreadId, null);
+        });
 
     /// <summary>
     /// Execute message queue.
@@ -251,21 +285,7 @@ public abstract class ThreadBoundSynchronizationContext :
                 $"Thread mismatch between created and running: Created={this.boundThreadId}, Running={currentThreadId}");
         }
 
-        // Schedule task completion.
-        task?.ContinueWith(t =>
-        {
-            if (t.IsCanceled)
-            {
-                this.InvokeUnhandledException(t.Exception!);
-            }
-            else if (t.IsFaulted)
-            {
-                this.InvokeUnhandledException(t.Exception!);
-            }
-
-            this.OnShutdown(this.boundThreadId);
-        });
-
+        this.HookTaskFinalizer(task);
         this.OnRun(this.boundThreadId);
     }
 

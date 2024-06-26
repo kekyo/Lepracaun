@@ -96,7 +96,10 @@ public sealed class InvokingTests
 
         Exception? ex = null;
         app.UnhandledException += (s, e) =>
+        {
             ex = e.Exception;
+            e.Handled = true;
+        };
 
         app.Run(() =>
         {
@@ -117,7 +120,10 @@ public sealed class InvokingTests
 
         Exception? ex = null;
         app.UnhandledException += (s, e) =>
+        {
             ex = e.Exception;
+            e.Handled = true;
+        };
 
         app.Run(async () =>
         {
@@ -137,7 +143,10 @@ public sealed class InvokingTests
 
         Exception? ex = null;
         app.UnhandledException += (s, e) =>
+        {
             ex = e.Exception;
+            e.Handled = true;
+        };
 
         app.Run(async () =>
         {
@@ -150,6 +159,78 @@ public sealed class InvokingTests
             await Task.Delay(100);
             await Child();
         });
+
+        IsTrue(ex is ApplicationException aex && aex.Message == "ABC");
+    }
+
+    [Test]
+    public void RunExceptionTest4()
+    {
+        IsNull(SynchronizationContext.Current);
+
+        using var app = new Application();
+
+        Exception? ex = null;
+        try
+        {
+            app.Run(() =>
+            {
+                throw new ApplicationException("ABC");
+            });
+        }
+        catch (Exception ex2)
+        {
+            ex = ex2;
+        }
+
+        IsTrue(ex is ApplicationException aex && aex.Message == "ABC");
+    }
+
+    [Test]
+    public void RunExceptionTest5()
+    {
+        IsNull(SynchronizationContext.Current);
+
+        using var app = new Application();
+
+        Exception? ex = null;
+        try
+        {
+            app.Run(() =>
+            {
+                var tcs = new TaskCompletionSource<int>();
+                tcs.SetException(new ApplicationException("ABC"));
+                return tcs.Task;
+            });
+        }
+        catch (Exception ex2)
+        {
+            ex = ex2;
+        }
+
+        IsTrue(ex is ApplicationException aex && aex.Message == "ABC");
+    }
+
+    [Test]
+    public void RunExceptionTest6()
+    {
+        IsNull(SynchronizationContext.Current);
+
+        using var app = new Application();
+
+        Exception? ex = null;
+        try
+        {
+            app.Run(async() =>
+            {
+                await Task.Delay(1);
+                throw new ApplicationException("ABC");
+            });
+        }
+        catch (Exception ex2)
+        {
+            ex = ex2;
+        }
 
         IsTrue(ex is ApplicationException aex && aex.Message == "ABC");
     }
