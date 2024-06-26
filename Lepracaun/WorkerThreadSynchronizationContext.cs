@@ -47,8 +47,7 @@ public sealed class WorkerThreadSynchronizationContext :
     /// <param name="task">Completion awaiting task</param>
     public override void Run(Task task)
     {
-        // Schedule task completion.
-        task?.ContinueWith(_ => this.OnShutdown(this.BoundIdentity));
+        this.HookTaskFinalizer(task);
         this.thread.Start();
     }
 

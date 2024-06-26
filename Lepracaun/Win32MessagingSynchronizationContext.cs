@@ -9,9 +9,14 @@
 
 using Lepracaun.Internal;
 using System;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+
+#if !NET35 && !NET40
+using System.Runtime.ExceptionServices;
+#endif
 
 namespace Lepracaun;
 
@@ -34,7 +39,7 @@ public sealed class Win32MessagingSynchronizationContext :
         // Using guid because type loaded into multiple AppDomain, type initializer called multiple.
         WM_SC = Win32NativeMethods.RegisterWindowMessageW(
             "Win32MessagingSynchronizationContext_" + Guid.NewGuid().ToString("N"));
-
+    
     /// <summary>
     /// Constructor.
     /// </summary>
@@ -78,6 +83,24 @@ public sealed class Win32MessagingSynchronizationContext :
             // If message number is WM_QUIT (Cause PostQuitMessage API):
             if (result == 0)
             {
+                if (msg.wParam != IntPtr.Zero)
+                {
+                    // Retreive GCHandles from a cookie.
+                    var exceptionHandle = GCHandle.FromIntPtr(msg.wParam);
+
+                    // Retreive an exception.
+                    var exception = (Exception)exceptionHandle.Target!;
+
+                    // Release handle (Recollectable by GC)
+                    exceptionHandle.Free();
+#if NET35 || NET40
+                    throw new TargetInvocationException(exception);
+#else
+                    var edi = ExceptionDispatchInfo.Capture(exception);
+                    edi.Throw();
+#endif
+                }
+
                 // Exit.
                 break;
             }
@@ -121,7 +144,12 @@ public sealed class Win32MessagingSynchronizationContext :
     }
 
     protected override void OnShutdown(
-        int targetThreadId) =>
+        int targetThreadId, Exception? exception)
+    {
+        var exceptionCookie = exception != null ?
+            GCHandle.ToIntPtr(GCHandle.Alloc(exception)) : IntPtr.Zero;
+        
         Win32NativeMethods.PostThreadMessage(
-            targetThreadId, Win32NativeMethods.WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+            targetThreadId, Win32NativeMethods.WM_QUIT, exceptionCookie, IntPtr.Zero);
+    }
 }
