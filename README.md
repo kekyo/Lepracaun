@@ -29,7 +29,7 @@ Lepracaun is a library that collection of .NET Synchronization Context. It is a 
 
 The following platforms are supported by the package.
 
-* NET 7 to 5
+* NET 8 to 5
 * NET Core 3.1 to 2.0
 * NET Standard 2.1 to 1.6 and 1.3
 * NET Framework 4.8.1 to 3.5
@@ -148,6 +148,8 @@ Apache-v2.
 
 ## History
 
+* 1.1.0:
+  * Fixed ignores any unhandled exceptions. (#1)
 * 1.0.0:
   * Improved queue consumer.
 * 0.4.0:
